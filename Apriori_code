@@ -1,0 +1,183 @@
+#Part 2.1
+
+import csv
+from itertools import combinations 
+
+print("Welcome to Apriori Retail Store!")
+
+#loads the user chosen transaction data for selectect store
+def load_transaction(filename):
+    transactions = []  #initial transaction (raw data)
+
+    with open(filename, 'r') as file: 
+        csv_reader = csv.reader(file) 
+        next(csv_reader) #skips the header row
+        for row in csv_reader:
+            transactions.append(row[1].strip().lower().split(','))
+    return transactions
+    
+#Reads the itemsets of chosen transaction 
+def load_items(filename):
+    items = []
+    with open(filename, 'r') as file:
+        csv_reader = csv.reader(file) 
+
+        next(csv_reader) #skips the header row
+        for row in csv_reader:
+            items.append(row[1].strip().lower()) #store item names in a list
+    return items
+
+#Preprocessing the data: this involves taking any whitespace, duplicates, missing information
+def pre_transactions(transactions):
+    cleaned_transactions= []
+    #split the items in each transaction and eliminates duplicate sets
+    for transaction in transactions:
+        cleaned_items = {item.strip() for item in transaction} #clean items by removing whitespace and converts to lowercase 
+        cleaned_transactions.append(sorted(cleaned_items))#sort the cleaned items and add to transactions
+    return cleaned_transactions
+
+#Ask the user which store they want to look at (user_specified)
+def selected_store():
+    store_options = {
+        "1" : ("Amazon", 'Amazon_Transactions.csv', 'Amazon_Item_Names.csv'),
+        "2" : ("Target", 'Target_Transactions.csv', 'Target_Item_Names.csv'),
+        "3" : ("Walmart", 'Walmart_Transactions.csv', 'Walmart_Item_Names.csv'),
+        "4" : ("Sephora", 'Sephora_Transactions.csv', 'Sephora_Item_Names.csv'),
+        "5" : ("Puma", 'Puma_Transactions.csv', 'Puma_Item_Names.csv')
+    }
+    while True:
+        selected_store = input("Please select a store:\n1. Amazon\n2. Target\n3. Walmart\n4. Sephora\n5. Puma")
+    
+        if selected_store in store_options:
+            store_name, transactions_file, items_file = store_options[selected_store]
+            print(f"You have selected {store_name}: ")
+            transactions = load_transaction(transactions_file)
+            items= load_items(items_file)
+            return transactions, items
+        else:
+            print("Incorrect Selection: Please select a valid store number!")
+
+def main():
+    transactions, items = selected_store()
+    if not transactions or not items:
+        print("failed to load transactions or items.")
+        return None,None
+
+    cleaned_transactions = pre_transactions(transactions) #preprocess the transactions
+    print("cleaned transactions:", cleaned_transactions)
+    
+    return cleaned_transactions, items
+    
+# Ask user to input the support and confidence 
+def user_input():
+    while True:
+        try:
+            min_support_percentage = float(input("Please enter the Minimum Support in % (Value from 1 to 100): "))
+            if not (1<= min_support_percentage <=100):
+                raise ValueError
+            break
+        except ValueError:
+            print("invalid input! Please enter a number between 1 and 100.")
+
+    print(f"You have selected Minimum Support: {min_support_percentage}%")
+
+    while True:
+        try:
+            min_confidence_percentage = float(input("Please enter the Minimum Confidence in % (Value from 1 to 100): "))
+            if not (1<= min_confidence_percentage <=100):
+                raise ValueError
+            break
+        except ValueError:
+            print("invalid input! Please enter a number between 1 and 100.")
+
+    print(f"You have selected Minimum Confidence: {min_confidence_percentage}%")
+    return min_support_percentage/100 , min_confidence_percentage/100
+
+# Part 2.2
+#Implementing the brute force method to generate frequent items and generate association rules
+
+#Find all frequent itemsets:
+# First we need to calculate the support for each item in each transaction
+def support(itemset, cleaned_transactions):
+    count = 0 #initial to count
+    for transaction in cleaned_transactions:
+        if set(itemset).issubset(transaction): #check to see if itemset is a subset of the transaction
+            count +=1
+    return count
+
+#Next we need to remove itemsets that is <minimum support count
+def filter_support(itemsets,cleaned_transactions, min_support_count):
+    frequent_itemsets =[]
+    for itemset in itemsets:
+        count = support(itemset, cleaned_transactions)
+        if count >= min_support_count:  #check if the item is frequent
+            frequent_itemsets.append(itemset)
+        else:
+            print(f"Itemset {itemset} filtered out due to insufficient support.")  # New debug statement
+    return frequent_itemsets
+
+
+#Next we generate k-itemsets and filter by min_support_count
+def gen_candidates(prev_freq_itemsets,k):
+    candidates =[]
+    for i in range(len(prev_freq_itemsets)): #loop through each pair of frequent itemsets
+        for j in range(i+1, len(prev_freq_itemsets)):
+            combined = sorted(set(prev_freq_itemsets[i]) | set(prev_freq_itemsets[j]))
+
+            if len(combined)==k and combined not in candidates:
+                candidates.append(combined)
+    return candidates 
+
+#create association rules found by apriori algorithm 
+def generate_rules(frequent_itemsets, cleaned_transactions, min_confidence):
+    rules = []
+    for itemset in frequent_itemsets:
+        for i in range(1, len(itemset)):
+            for antecedent in combinations(itemset, i):
+                antecedent = list(antecedent)
+                consequent = list(set(itemset) - set(antecedent))
+                if consequent:
+                    support_count_antecedent = support(antecedent, cleaned_transactions)
+                    if support_count_antecedent > 0:  # Avoid division by zero
+                        confidence = support(itemset, cleaned_transactions) / support_count_antecedent
+                        if confidence >= min_confidence:
+                            rules.append((antecedent, consequent, confidence))
+    return rules
+
+# Main script execution
+if __name__ == "__main__":
+    cleaned_transactions, items = main()
+    if cleaned_transactions is None:
+        exit()
+
+    min_support, min_confidence = user_input()
+    min_support_count = min_support * len(cleaned_transactions)
+
+    # Generate itemsets (single items for initial)
+    itemsets = [[item] for item in items]
+
+    # Iteratively generate frequent itemsets
+    frequent_itemsets = []
+    k = 1
+    while itemsets:
+        current_frequent_itemsets = filter_support(itemsets, cleaned_transactions, min_support_count)
+        if not current_frequent_itemsets:
+            break
+        frequent_itemsets.extend(current_frequent_itemsets)
+        k += 1
+        itemsets = gen_candidates(current_frequent_itemsets, k)
+
+    # Generate rules
+    association_rules = generate_rules(frequent_itemsets, cleaned_transactions, min_confidence)
+
+    # Print results
+    print("\nItemsets:")
+    for itemset in frequent_itemsets:
+        print(itemset)
+
+    print("\nAssociation Rules:")
+    for rule in association_rules:
+        antecedent, consequent, confidence = rule
+        print(f"{set(antecedent)} --> {set(consequent)} (Confidence: {confidence:.2f})")
+
+
