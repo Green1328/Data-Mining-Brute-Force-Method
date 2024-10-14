@@ -180,4 +180,101 @@ if __name__ == "__main__":
         antecedent, consequent, confidence = rule
         print(f"{set(antecedent)} --> {set(consequent)} (Confidence: {confidence:.2f})")
 
+Part 3. 
+#using a apriori built in function in python
+from apyori import apriori
 
+print("Welcome to Apriori Retail Store!")
+
+#loads the user chosen transaction data for selectect store
+def load_transaction(filename):
+    transactions = []  #initial transaction (raw data)
+
+    with open(filename, 'r') as file: 
+        csv_reader = csv.reader(file) 
+        next(csv_reader) #skips the header row
+        for row in csv_reader:
+            transactions.append(row[1].strip().lower().split(','))
+    return transactions
+    
+#Preprocessing the data: this involves taking any whitespace, duplicates, missing information
+def pre_transactions(transactions):
+    cleaned_transactions= []
+    #split the items in each transaction and eliminates duplicate sets
+    for transaction in transactions:
+        cleaned_items = {item.strip() for item in transaction} #clean items by removing whitespace and converts to lowercase 
+        cleaned_transactions.append(sorted(cleaned_items))#sort the cleaned items and add to transactions
+    return cleaned_transactions
+
+# Main apriori with apyori
+def run_apriori(cleaned_transactions, min_support, min_confidence):
+    results = list(apriori(cleaned_transactions, min_support=min_support, min_confidence=min_confidence))
+
+    print("\nAssociation Rules:")
+    for i, rule in enumerate(results):
+        for ordered_stat in rule.ordered_statistics:
+            antecedent = list(ordered_stat.items_base)
+            consequent = list(ordered_stat.items_add)
+
+            if antecedent and consequent:
+                print(f"Rule {i+1}: {','.join(antecedent)} --> {',' .join(consequent)} "
+                      f"(Support: {rule.support: .2f}, confidence: {ordered_stat.confidence:.2f}")
+
+# Ask the user which store they want to look at (user_specified)
+def selected_store():
+    store_options = {
+        "1" : ("Amazon", 'Amazon_Transactions.csv', 'Amazon_Item_Names.csv'),
+        "2" : ("Target", 'Target_Transactions.csv', 'Target_Item_Names.csv'),
+        "3" : ("Walmart", 'Walmart_Transactions.csv', 'Walmart_Item_Names.csv'),
+        "4" : ("Sephora", 'Sephora_Transactions.csv', 'Sephora_Item_Names.csv'),
+        "5" : ("Puma", 'Puma_Transactions.csv', 'Puma_Item_Names.csv')
+    }
+    while True:
+        selected_store = input("Please select a store:\n1. Amazon\n2. Target\n3. Walmart\n4. Sephora\n5. Puma")
+    
+        if selected_store in store_options:
+            store_name, transactions_file, items_file = store_options[selected_store]
+            print(f"You have selected {store_name}: ")
+            transactions = load_transaction(transactions_file)
+            return transactions
+        else:
+            print("Incorrect Selection: Please select a valid store number!")
+
+
+def get_user_input():
+    while True:
+        try:
+            min_support = float(input("Please enter the Minimum Support (e.g., 0.5 for 50%): "))
+            if not (0 < min_support <= 1):
+                raise ValueError
+            break
+        except ValueError:
+            print("Invalid input! Please enter a value between 0 and 1 for Minimum Support.")
+
+    while True:
+        try:
+            min_confidence = float(input("Please enter the Minimum Confidence (e.g., 0.4 for 40%): "))
+            if not (0 < min_confidence <= 1):
+                raise ValueError
+            break
+        except ValueError:
+            print("Invalid input! Please enter a value between 0 and 1 for Minimum Confidence.")
+
+    return min_support, min_confidence
+
+
+def main():
+    transactions = selected_store()
+    if not transactions:
+        print("failed to load transactions or items.")
+        return None
+
+    cleaned_transactions = pre_transactions(transactions) #preprocess the transactions
+    print("cleaned transactions:, {cleaned_transactions}")
+    
+    min_support, min_confidence = get_user_input()  # Get user-defined support and confidence
+
+    run_apriori(cleaned_transactions, min_support, min_confidence)  # Run Apriori
+
+if __name__ == "__main__":
+    main()
